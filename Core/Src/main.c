@@ -18,12 +18,14 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "i2c.h"
 #include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,13 +46,14 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+int counter = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-
+void scan_i2c_bus(void);
+bool is_i2c_device_connected(uint8_t address);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -61,6 +64,35 @@ int _write(int file, char *ptr, int len)
 		ITM_SendChar(*ptr++);
 	}
 	return len;
+}
+
+void scan_i2c_bus(void) {
+	printf("Starting I2C Scanner...\n");
+	int found_devices = 0; // reset device counter
+	for (int i2c_address = 1; i2c_address < 128; i2c_address++) {
+		HAL_StatusTypeDef status;
+
+		// Check if a device acknowledges the address
+		status = HAL_I2C_IsDeviceReady(&hi2c1, i2c_address << 1, 3, 100);
+
+		if (status == HAL_OK) {
+			printf("0x%02X", i2c_address);
+			found_devices++;
+		} else {
+			printf(".");  // Print a dot for no device at this address
+		}
+	}
+
+	if (found_devices == 0) {
+		printf("\nNo I2C devices found.\n");
+	} else {
+		printf("\nScan complete. Found %d device(s).\n", found_devices);
+	}
+}
+
+bool is_i2c_device_connected(uint8_t address) {
+	HAL_StatusTypeDef status = HAL_I2C_IsDeviceReady(&hi2c1, address << 1, 3, HAL_MAX_DELAY);
+	return (status == HAL_OK) ? 1 : 0;
 }
 /* USER CODE END 0 */
 
@@ -94,6 +126,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -105,9 +138,21 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-	  printf("Blink!\r\n");
-	  HAL_Delay(500);
+		HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+		printf("Blink! %d\r\n", counter++);
+		scan_i2c_bus();
+		if (is_i2c_device_connected(0x1E)) {
+			printf("Device 0x%02X is connected\r\n", 0x1E);
+		} else {
+			printf("Device 0x%02X not connected\r\n", 0x1E);
+		}
+
+		if (is_i2c_device_connected(0x1)) {
+			printf("Device 0x%02X is connected\r\n", 0x1);
+		} else {
+			printf("Device 0x%02X not connected\r\n", 0x1);
+		}
+		HAL_Delay(3000);
   }
   /* USER CODE END 3 */
 }
@@ -150,8 +195,9 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART2;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART2|RCC_PERIPHCLK_I2C1;
   PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
+  PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_HSI;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
